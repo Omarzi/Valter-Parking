@@ -1,3 +1,5 @@
 packge-lock.json
+
 node_modules/*
+
 .env
