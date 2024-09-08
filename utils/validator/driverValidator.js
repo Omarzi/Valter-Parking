@@ -52,9 +52,9 @@ exports.addNewUserValidator = [
 ],
 
 exports.takeAttendanceValidator = [
-   check("user")
+   check("admin")
    .notEmpty()
-   .withMessage("user is required"),
+   .withMessage("admin is required"),
 
 check("lat")
    .notEmpty()

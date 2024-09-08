@@ -7,23 +7,28 @@ const bcrypt = require("bcrypt")
 const QRCode = require('qrcode');
 const moment = require('moment');
 const formatDate = require("../middleware/formatDateMiddleware")
+const jwt = require("jsonwebtoken")
 
 
 exports.getProfile = asyncHandler(async(req , res , next) => {
     const {userId} = req.params
-    const user = await userSchema.findById(userId)
+    const user = await userSchema.findById(userId).populate({
+      path: 'saved',
+      model: 'Garages',
+      select: '-__v'
+  });
     if(!user){
         return next (new ApiError(`could not found user by this id ${req.params.useId} `,404))
     }
 
     const formattedUser = {
-      userId: user._id, 
-      role: user.role,
+      userId: user._id.toString(), 
       username: user.username,
       email: user.email,
-      carname: user.carName,
-      carnumber: user.carNumber,
+      carName: user.carName,
+      carNumber: user.carNumber,
       saved: user.saved,
+      role: user.role,
       createdAt: formatDate(user.createdAt),
       updatedAt: formatDate(user.updatedAt) ,
       passwordChangedAt: formatDate(user.passwordChangedAt) ,
@@ -42,63 +47,233 @@ exports.updateProfile = asyncHandler(async(req , res , next) => {
             email: req.body.email,
             phone: req.body.phone,
             profileImage: req.body.profileImage,
-            carname:req.body.carname,
-            carnumber:req.body.carnumber,
-            carImage:req.body.carImage
+            carname:req.body.carName,
+            carnumber:req.body.carNumber,
+            carImage:req.body.carImage,
+            
         },{new : true}
     )
     if(!user){
         return next (new ApiError(`could not found user by this id ${req.params.useId} `,404))   
     }
-
+    const formattedUser =         { 
+      userId: user._id.toString(), 
+      username:user.username,
+      email: user.email,
+      phone: user.phone,
+      profileImage: user.profileImage,
+      carName:user.carName,
+      carNumber:user.carNumber,
+      carImage:user.carImage,
+      createdAt: formatDate(user.createdAt),
+      updatedAt: formatDate(user.updatedAt) ,
+  }
     delete user._doc.password && delete user._doc.__v
-    res.status(200).json(user)
+    res.status(200).json(formattedUser)
 })
 
 
-exports.updatePassword = asyncHandler(async (req, res , next) => {
-    const user = await userSchema.findByIdAndUpdate(req.params.userId , {
-        password: await bcrypt.hash(req.body.newPassword , 12),
-        passwordChangedAt : Date.now()
-    } , {new: true})
+exports.updatePassword = asyncHandler(async (req, res, next) => {
+  const user = await userSchema
+    .findByIdAndUpdate(
+      req.params.userId,
+      {
+        password: await bcrypt.hash(req.body.newPassword, 12),
+        passwordChangedAt: Date.now(),
+      },
+      { new: true }
+    )
+    .populate({
+      path: "saved",
+      model: "Garages",
+      select: "-__v",
+    });
 
-    if(!user){
-        return next (new ApiError(`could not found user by this id ${req.params.useId} `,404))  
-    }
-    delete user._doc.password && delete user._doc.__v
-    res.status(200).json(user)
-})
+  if (!user) {
+    return next(
+      new ApiError(`could not find user by this id ${req.params.userId}`, 404)
+    );
+  }
+
+  const token = jwt.sign(
+    { userId: user.id },
+    process.env.JWT_SECRET_KEY,
+    { expiresIn: process.env.JWT_EXPIRE_TIME }
+  );
+
+  const formattedUser = {
+    userId: user._id.toString(),
+    username: user.username,
+    email: user.email,
+    phone: user.phone,
+    profileImage: user.profileImage,
+    carName: user.carName,
+    carNumber: user.carNumber,
+    carImage: user.carImage,
+    createdAt: formatDate(user.createdAt),
+    updatedAt: formatDate(user.updatedAt),
+  };
+  
+  // Sending the response as an object containing both user data and token
+  res.status(200).json({
+    status: "success",
+    user: formattedUser,
+    token: token,
+  });
+});
 
 
+// exports.getAllGarages = asyncHandler(async (req, res, next) => {
+//     // Check if the active query parameter is passed
+//     const filter = req.query.active === 'true' ? { active: true } : {}; // Use {} to return all if no filter is provided
+
+//     // Fetch garages based on the filter
+//     const garages = await garageSchema.find(filter);
+
+//     // Handle the case where no garages are found
+//     if (!garages || garages.length === 0) {
+//         return next(new ApiError("Could not find any garage", 404));
+//     }
+//     const formattedGarage =garages.map (garages=> ({
+//       garageId: garages._id, // Format _id as a string
+//       gragename: garages.gragename || '',
+//       grageDescription: garages.grageDescription || '',
+//       grageImages: garages.grageImages || '',
+//       gragePricePerHoure: garages.gragePricePerHoure || 0,
+//       lat: garages.lat || 0,
+//       lng: garages.lng || 0,
+//       openDate:formatDate(garages.createdAt),
+//       endDate: formatDate(garages.updatedAt) ,/// Format ISO 8601
+//       active: garages.active || false,
+//       driver: garages.driver || [],
+//       subOwner: garages.subOwner || [],
+//       isSaved:garages.isSaved,
+//       createdAt: formatDate(garages.createdAt),
+//       updatedAt: formatDate(garages.updatedAt) // Format ISO 8601
+  
+//   }))
+//     // Return the filtered or all garages
+//     res.status(200).json({ "Garage Details": formattedGarage });
+// });
+ // Adjust the path as necessary
 
 exports.getAllGarages = asyncHandler(async (req, res, next) => {
-    // Check if the active query parameter is passed
-    const filter = req.query.active === 'true' ? { active: true } : {}; // Use {} to return all if no filter is provided
+  // Check if the active query parameter is passed
+  const filter = req.query.active === 'true' ? { active: true } : {}; // Use {} to return all if no filter is provided
 
-    // Fetch garages based on the filter
-    const garages = await garageSchema.find(filter);
+  // Fetch garages based on the filter
+  const garages = await garageSchema.find(filter);
 
-    // Handle the case where no garages are found
-    if (!garages || garages.length === 0) {
-        return next(new ApiError("Could not find any garage", 404));
-    }
+  // Handle the case where no garages are found
+  if (!garages || garages.length === 0) {
+    return next(new ApiError("Could not find any garage", 404));
+  }
 
-    // Return the filtered or all garages
-    res.status(200).json({ "Garage Details": garages });
+  // Fetch the current user's saved garages using userId from the token
+  const user = await userSchema.findById(req.user._id).populate('saved');
+  if (!user) {
+    return next(new ApiError('User not found', 404));
+  }
+  const savedGarageIds = user.saved.map(garage => garage._id.toString());
+
+  // Helper function to format dates
+ 
+
+  // Format the garages and check if each one is saved by the user
+  const formattedGarages = garages.map(garage => ({
+    garageId: garage._id.toString(), // Format _id as a string
+    gragename: garage.gragename || '',
+    grageDescription: garage.grageDescription || '',
+    grageImages: garage.grageImages || '', // Assuming it's an array; adjust if needed
+    gragePricePerHoure: garage.gragePricePerHoure || 0,
+    lat: garage.lat || 0,
+    lng: garage.lng || 0,
+    openDate: formatDate(garage.openDate),
+    endDate: formatDate(garage.endDate),
+    active: garage.active || false,
+    driver: garage.driver.map(id => id.toString()), // Ensure IDs are strings
+    subOwner: garage.subOwner.map(id => id.toString()), // Ensure IDs are strings
+    isSaved: savedGarageIds.includes(garage._id.toString()) ? true : false, // Convert boolean to string
+    createdAt: formatDate(garage.createdAt),
+    updatedAt: formatDate(garage.updatedAt) // Format ISO 8601
+  }));
+
+  // Return the filtered or all garages
+  res.status(200).json({ "Garage Details": formattedGarages });
 });
 
 
 
 
 
-exports.getSpecificGarage = asyncHandler(async( req , res , next) => {
-  const findGarage = await garageSchema.findById(req.params.garageId)
-  if(!findGarage) {
-      throw next(new ApiError(` This garage is not found` , 404))
+// exports.getSpecificGarage = asyncHandler(async( req , res , next) => {
+//   const findGarage = await garageSchema.findById(req.params.garageId)
+//   if(!findGarage) {
+//       throw next(new ApiError(` This garage is not found` , 404))
+//   }
+//   else{
+//     const formattedGarage = {
+//       garageId: findGarage._id.toString(), // Format _id as a string
+//       gragename: findGarage.gragename || '',
+//       grageDescription: findGarage.grageDescription || '',
+//       grageImages: findGarage.grageImages || '',
+//       gragePricePerHoure: findGarage.gragePricePerHoure || 0,
+//       lat: findGarage.lat || 0,
+//       lng: findGarage.lng || 0,
+//       openDate:formatDate(findGarage.createdAt),
+//       endDate: formatDate(findGarage.updatedAt) ,/// Format ISO 8601
+//       active: findGarage.active || false,
+//       driver: findGarage.driver || [],
+//       subOwner: findGarage.subOwner || [],
+//       createdAt: formatDate(findGarage.createdAt),
+//       updatedAt: formatDate(findGarage.updatedAt) // Format ISO 8601
+  
+//   }
+//  res.status(200).json({findGarage: formattedGarage})
+// }})
+exports.getSpecificGarage = asyncHandler(async (req, res, next) => {
+  // Ensure userId is available from the token middleware
+  if (!req.user._id) {
+    return next(new ApiError('User not authenticated', 401));
   }
-  else{
- res.status(200).json({findGarage: findGarage})
-}})
+
+  // Find the garage by ID
+  const findGarage = await garageSchema.findById(req.params.garageId);
+  if (!findGarage) {
+    return next(new ApiError('This garage is not found', 404));
+  }
+
+  // Find the user and check if the garage is in the saved list
+  const user = await userSchema.findById(req.user._id);
+  if (!user) {
+    return next(new ApiError('User not found', 404));
+  }
+
+  const isSaved = user.saved.includes(findGarage._id);
+
+  // Format the garage details
+  const formattedGarage = {
+    garageId: findGarage._id.toString(), // Format _id as a string
+    gragename: findGarage.gragename || '',
+    grageDescription: findGarage.grageDescription || '',
+    grageImages: findGarage.grageImages || '',
+    gragePricePerHoure: findGarage.gragePricePerHoure || 0,
+    lat: findGarage.lat || 0,
+    lng: findGarage.lng || 0,
+    openDate: formatDate(findGarage.openDate),
+    endDate: formatDate(findGarage.endDate), // Format ISO 8601
+    active: findGarage.active || false,
+    driver: findGarage.driver || [],
+    subOwner: findGarage.subOwner || [],
+    isSaved: isSaved ? true : false, // Set isSaved based on whether the garage is in the user's saved list
+    createdAt: formatDate(findGarage.createdAt),
+    updatedAt: formatDate(findGarage.updatedAt) // Format ISO 8601
+  };
+
+  // Send the response
+  res.status(200).json({ findGarage: formattedGarage });
+});
+
 
 
    //  Make   Order   //
@@ -197,6 +372,7 @@ exports.makeOrder = asyncHandler(async (req, res, next) => {
     const newOrder = await orderSchema.create(newOrderData);
 
     // Respond with the created order and the QR code image (base64)
+
     res.status(201).json({
       message: 'Order created successfully',
       order: newOrder
@@ -207,44 +383,64 @@ exports.makeOrder = asyncHandler(async (req, res, next) => {
   }
 });
 
-
-  
-
   //     Get Specific  Order   //
 
   exports.getOrder = asyncHandler(async( req , res , next) => {
-    const order = await orderSchema.findById(req.params.orderId)
+    const order = await orderSchema.findById(req.params.orderId).populate([
+      {
+        path: 'user',
+        model: 'Users',
+        select: '-__v '
+      },
+      {
+        path: 'garage',
+        model: 'Garages',
+       select: '-__v '
+      }
+    ]);
     if(!order){
         throw next(new ApiError(` This order is not found` , 404))
     }
     else{
-   res.status(200).json({Order : order})
+      const formattedOrder = {
+        orderId: order._id.toString(),
+        user: {
+          userId: order.user._id.toString(),
+          ...order.user.toObject(), // Include other user fields
+          createdAt: formatDate(order.user.createdAt),
+          updatedAt: formatDate(order.user.updatedAt)
+        },
+        garage: {
+          garageId: order.garage._id.toString(),
+          ...order.garage.toObject(), // Include other garage fields
+          createdAt: formatDate(order.garage.createdAt),
+          updatedAt: formatDate(order.garage.updatedAt)
+        },
+        typeOfCar: order.typeOfCar,
+        date: order.date,
+        timeRange: {
+          start: order.timeRange.start,
+          end: order.timeRange.end,
+        },
+        totalPrice: order.totalPrice,
+        duration: order.duration,
+        paymentMethod: order.paymentMethod,
+        isPaid: order.isPaid,
+        status: order.status,
+        startNow: order.startNow,
+        timeLeft: order.timeLeft,
+        qrCode: order.qrCode,
+        createdAt: formatDate(order.createdAt),
+        updatedAt: formatDate(order.updatedAt)
+      };
+      delete formattedOrder.user._id;
+      delete formattedOrder.garage._id;
+
+   res.status(200).json( formattedOrder)
 }})
 
 //    Get All  Order  //
 
-
-
-// exports.getAllOrders = asyncHandler(async (req, res, next) => {
-//     const change = req.query; 
-  
-//     const orders = await orderSchema.find(change);
-  
-//     if (!orders || orders.length === 0) {
-//       return next(new ApiError("Could not find any order", 404));
-//     } else {
-   
-//       orders.forEach(order => {
-        
-//         if (order.status === 'completed' || order.status === 'canceled') {
-         
-//           delete order._doc.isPaied;
-//         }
-//       });
-  
-//       res.status(200).json({ "order Details": orders });
-//     }
-//   });
 
 exports.getAllOrders = asyncHandler(async (req, res, next) => {
   const { "timeRange.start": timeRangeStart, "timeRange.end": timeRangeEnd, ...query } = req.query;
@@ -273,19 +469,71 @@ exports.getAllOrders = asyncHandler(async (req, res, next) => {
   const finalQuery = { ...query, ...timeRangeQuery };
 
   // Find the orders based on the query
-  const orders = await orderSchema.find(finalQuery);
+  const orders = await orderSchema.find(finalQuery).populate([
+    {
+      path: 'user',
+      model: 'Users',
+      select: '-__v '
+    },
+    {
+      path: 'garage',
+      model: 'Garages',
+      select: '-__v '
+    }
+  ]);
 
   if (!orders || orders.length === 0) {
-      return next(new ApiError("Could not find any order", 404));
-  } else {
-      orders.forEach(order => {
-          if (order.status === 'completed' || order.status === 'canceled') {
-              delete order._doc.isPaied;
-          }
-      });
 
-      res.status(200).json({ "order Details": orders });
+  res.status(200).json({ "order Details": [] });
+  
   }
+
+  // Helper function to format date
+  const formatDate = (date) => moment(date).format('hh:mm A');
+
+  // Format each order
+  const formattedOrders = orders.map(order => {
+      const formattedOrder = {
+          orderId: order._id.toString(),
+          user: order.user ? {
+              userId: order.user._id.toString(),
+              ...order.user.toObject(),
+              createdAt: formatDate(order.user.createdAt),
+              updatedAt: formatDate(order.user.updatedAt)
+          } : null,
+          garage: order.garage ? {
+              garageId: order.garage._id.toString(),
+              ...order.garage.toObject(),
+              createdAt: formatDate(order.garage.createdAt),
+              updatedAt: formatDate(order.garage.updatedAt)
+          } : null,
+          typeOfCar: order.typeOfCar,
+          date: order.date,
+          timeRange: order.timeRange ? {
+              start: order.timeRange.start,
+              end: order.timeRange.end,
+          } : null,
+          totalPrice: order.totalPrice,
+          duration: order.duration,
+          paymentMethod: order.paymentMethod,
+          isPaid: order.isPaid,
+          status: order.status,
+          startNow: order.startNow,
+          timeLeft: order.timeLeft,
+          qrCode: order.qrCode,
+          createdAt: formatDate(order.createdAt),
+          updatedAt: formatDate(order.updatedAt)
+      };
+
+      // Remove _id from user and garage objects if they exist
+      if (formattedOrder.user) delete formattedOrder.user._id;
+      if (formattedOrder.garage) delete formattedOrder.garage._id;
+
+      return formattedOrder;
+  });
+
+  // Send the formatted orders as the response
+  res.status(200).json({ "order Details": formattedOrders });
 });
 
 
@@ -316,11 +564,31 @@ exports.getAllOrders = asyncHandler(async (req, res, next) => {
   })
 
            //  Get User wallet // 
+  // exports.getUserWallet = asyncHandler(async(req , res , next) => {
+  //   const user = await userSchema.findById(req.params.userId).populate('wallet')
+  //   if(!user){
+  //     return next (new ApiError(`could not found any user by this id ${req.params.userId} `,404))   
+
+  //   }
+  //   if(!user.wallet){
+  //     // return next (new ApiError(`This user does not have wallet `,404))  
+  //   res.status(200).json( {message:'This user does not have wallet'} );
+
+
+  //   }
+  //   res.status(200).json(  {data:user.wallet } );
+  // })
   exports.getUserWallet = asyncHandler(async(req , res , next) => {
     const user = await userSchema.findById(req.params.userId).populate('wallet')
     if(!user){
       return next (new ApiError(`could not found any user by this id ${req.params.userId} `,404))   
-
+  
     }
-    res.status(200).json(  {data:user.wallet } );
-  })
+    if(!user.wallet){
+      // return next (new ApiError( `This user does not have wallet `,404))  
+    res.status(200).json( {message: 'This user does not have wallet'} );
+  
+  
+    }
+    res.status(200).json(  {message: 'This user have wallet', data:user.wallet } );
+  });

@@ -11,7 +11,7 @@ const garageSchema = new mongoose.Schema({
         require:true
     },
 
-    grageImages : String,
+    garageImages : [String],
 
     gragePricePerHoure : {
         type:Number,
@@ -55,6 +55,10 @@ const garageSchema = new mongoose.Schema({
         ref:'Admin',
         require:true
     }],
+
+    isSaved: {
+        type: Boolean,
+    }
 
 
 } , {timestamps :true})

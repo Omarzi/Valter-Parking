@@ -96,9 +96,9 @@ exports.addNewGarageValidator = [
      .notEmpty()
      .withMessage("driver is required"), 
 
-  check("subowner")
+  check("subOwner")
      .notEmpty()
-     .withMessage("subowner is required"),    
+     .withMessage("subOwner is required"),    
     validatorMiddleware,
 
 ]

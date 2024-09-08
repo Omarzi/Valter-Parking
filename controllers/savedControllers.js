@@ -41,8 +41,8 @@ const formatGarage = (garage) => {
         gragePricePerHoure: garage.gragePricePerHoure || 0,
         lat: garage.lat || 0,
         lng: garage.lng || 0,
-        openDate:formatDate(garage.createdAt),
-        endDate: formatDate(garage.updatedAt) ,/// Format ISO 8601
+        openDate:formatDate(garage.openDate),
+        endDate: formatDate(garage.endDate) ,/// Format ISO 8601
         active: garage.active || false,
         createdAt: formatDate(garage.createdAt),
         updatedAt: formatDate(garage.updatedAt) // Format ISO 8601
@@ -50,6 +50,7 @@ const formatGarage = (garage) => {
 };
 
 exports.addGarageToSaved = asyncHandler(async (req, res, next) => {
+
     const user = await userSchema.findByIdAndUpdate(
         req.user._id,
         { $addToSet: { saved: req.body.garageId } },
@@ -57,8 +58,9 @@ exports.addGarageToSaved = asyncHandler(async (req, res, next) => {
     ).populate({
         path: 'saved', // Populate the saved field
         model: 'Garages', // Ensure it populates from the Garage model
-        select: '-__v' // Exclude __v if you don't want it in the response
+        select: '-__v ' // Exclude __v if you don't want it in the response
     });
+    
 
     if (!user) {
         return res.status(404).json({
@@ -69,6 +71,7 @@ exports.addGarageToSaved = asyncHandler(async (req, res, next) => {
 
     // Format the garage data
     const formattedGarages = user.saved.map(formatGarage);
+   
 
     res.status(200).json({
         status: "Success",
@@ -101,7 +104,12 @@ exports.getUserSavedGarage = asyncHandler(async (req, res, next) => {
     const { search } = req.query; // Get the search term from query parameters
 
     // Fetch the user by ID
-    const user = await userSchema.findById(req.user._id);
+    const user = await userSchema.findById(req.user._id).populate({
+        path: 'saved', // Populate the saved field
+        model: 'Garages', // Ensure it populates from the Garage model
+        select: '-__v -driver -subOwner' // Exclude __v if you don't want it in the response
+    });
+;
     
     if (!user) {
         return res.status(404).json({

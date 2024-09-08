@@ -70,10 +70,11 @@ exports.addNewUser = asyncHandler(async(req , res , next) => {
         const formattedUser = {
            userId: user._id, 
           email: user.email,
+          password:user.password,
           createdAt: formatDate(user.createdAt),
           updatedAt: formatDate(user.updatedAt) 
       };
-        res.status(200).json({user: formattedUser})
+        res.status(200).json({userData: formattedUser})
        }
     
 })
@@ -105,19 +106,20 @@ exports.takeAttendanceStartIn = asyncHandler(async (req, res, next) => {
 
     // Create attendance record
     const attendance = await attendnceSchema.create({
-      adminId: req.admin._id,
-      lat: req.lat,
-      lng: req.lng,
+      admin: req.admin._id,
+      lat: req.body.lat,
+      lng: req.body.lng,
       startIn: startDate,
       endIn: null,
-      status
+      status,
+      garageId:garage
     });
 
     // Format the response
     const formatAttendance = {
-      adminId: req.admin._id.toString(), // Convert ObjectId to string
-      lat: req.lat,
-      lng: req.lng,
+      attendanceId: attendance._id.toString(), // Convert ObjectId to string
+      lat: attendance.lat,
+      lng: attendance.lng,
       startIn: formatDate(startDate),
       endIn: null,
       status,
@@ -158,7 +160,7 @@ exports.takeAttendanceStartIn = asyncHandler(async (req, res, next) => {
     
         // Create attendance record
         const attendance = await attendnceSchema.create({
-          user: req.user._id,
+          admin: req.admin._id,
           lat,
           lng,
           startIn: null,
@@ -166,9 +168,9 @@ exports.takeAttendanceStartIn = asyncHandler(async (req, res, next) => {
           status
         });
         const formatAttendance = {
-          adminId: req.admin._id.toString(), // Convert ObjectId to string
-          lat: req.lat,
-          lng: req.lng,
+          attendanceId: attendance._id.toString(), // Convert ObjectId to string
+          lat: attendance.lat,
+          lng: attendance.lng,
           startIn: null,
           endtIn: formatDate(endDate),
           status,

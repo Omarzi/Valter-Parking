@@ -1,7 +1,6 @@
 const userSchema = require("../models/authModel");
 const ApiError = require("../utils/apiError")
 const asyncHandler = require("express-async-handler");
-const {  uploadSingleImage} = require("../middleware/uploadImageMiddleware");
 const jwt = require("jsonwebtoken")
 const bcrypt = require("bcrypt")
 const crypto = require("crypto")
@@ -11,146 +10,185 @@ const sharp = require("sharp")
 const moment = require('moment');
 const formatDate = require("../middleware/formatDateMiddleware")
 const adminSchema = require("../models/adminModel")
+const multer = require("multer")
 
 
 
+const multerStorage = multer.memoryStorage();
 
-//    Upload Profile image and Car image  //
-
-exports.uploadAuthImage = uploadSingleImage('profileImage');
-
-// Resizing the image
-const path = require('path');
-
-exports.resizeImage = asyncHandler(async (req, res, next) => {
-  if (req.file) {
-    // Extract the original extension from the uploaded file
-    const originalExtension = path.extname(req.file.originalname); // e.g., '.png', '.jpg'
-    
-    // Choose the desired format for the output (e.g., 'jpeg')
-    const format = 'jpeg'; // You can also use 'png', 'webp', etc.
-
-    // Generate a new filename with the chosen format extension
-    const filename = `Users-${uuidv4()}-${Date.now()}.${format}`;
-
-    // Process the image and change its extension
-    const sharpInstance = sharp(req.file.buffer).resize(600, 600);
-
-    // Apply the chosen format
-    if (format === 'jpeg') {
-      sharpInstance.jpeg({ quality: 90 });
-    } else if (format === 'png') {
-      sharpInstance.png({ quality: 90 });
-    } else if (format === 'webp') {
-      sharpInstance.webp({ quality: 90 });
+const multerFilter = function(req, file, cb) {
+    if (file.mimetype.startsWith('image')) {
+        cb(null, true);
+    } else {
+        cb(new ApiError('Only images allowed', 404), false);
     }
+};
 
-    // Save the file with the new format
-    await sharpInstance.toFile(`uploads/profileImage/${filename}`);
+// exports.resizeImage = asyncHandler(async (req, res, next) => {
+//     // Check if both images are uploaded
+//     if (req.files && req.files.profileImage && req.files.carImage) {
+//         // Process profileImage
+//         const profileImageFilename = `profileImage-${uuidv4()}-${Date.now()}.jpeg`;
+//         await sharp(req.files.profileImage[0].buffer)
+//             .resize(600, 600)
+//             .toFormat('jpeg')
+//             .jpeg({ quality: 90 })
+//             .toFile(`uploads/userImages/${profileImageFilename}`);
+//         req.body.profileImage = profileImageFilename;
 
-    // Store the new filename in the request body to use later
-    req.body.profileImage = filename;
-  }
-
-  next();
-});
-
-
-    //        Register      //
-
-exports.signUp = asyncHandler(async (req , res , next) => {
-
-    const hashedPassword = await bcrypt.hash(req.body.password,10)
-    const user = await userSchema.create({
-
-        username: req.body.username ,
-        email: req.body.email , 
-        password: hashedPassword, 
-        phoner:req.body.phone,
-        carName : req.body.carName , 
-        carNumber: req.body.carNumber 
-
-    })
-
-    const token =jwt.sign({
-        userId : user.id,  },
-        process.env.JWT_SECRET_KEY,
-        {expiresIn : process.env.JWT_EXPIRE_TIME}
-        
-        )
-        const formattedUser = {
-            role: user.role,
-            userId: user._id, 
-            username: user.username,
-            email: user.email,
-            carname: user.carName,
-            carnumber: user.carNumber,
-            saved: user.saved,
-            createdAt: formatDate(user.createdAt),
-            updatedAt: formatDate(user.updatedAt) 
+//         // Process carImage
+//         const carImageFilename = `carImage-${uuidv4()}-${Date.now()}.jpeg`;
+//         await sharp(req.files.carImage[0].buffer)
+//             .resize(600, 600)
+//             .toFormat('jpeg')
+//             .jpeg({ quality: 90 })
+//             .toFile(`uploads/userImages/${carImageFilename}`);
+//         req.body.carImage = carImageFilename;
+//     }
+//     next();
+// });
+exports.resizeImage = asyncHandler(async (req, res, next) => {
+    // Check if both images are uploaded
+    if (req.files && req.files.profileImage && req.files.carImage) {
+        // Helper function to get file extension
+        const getFileExtension = (mimeType) => {
+            switch (mimeType) {
+                case 'image/jpeg':
+                    return 'jpeg';
+                case 'image/jpg':
+                    return 'jpg';
+                case 'image/png':
+                    return 'png';
+                default:
+                    return 'jpeg'; // Default to jpeg if format is not recognized
+            }
         };
 
-        delete user._doc.password && delete user._doc.__v
-        res.status(200).json({userData :formattedUser , token})
+        // Process profileImage
+        const profileImageExtension = getFileExtension(req.files.profileImage[0].mimetype);
+        const profileImageFilename = `profileImage-${uuidv4()}-${Date.now()}.${profileImageExtension}`;
+        await sharp(req.files.profileImage[0].buffer)
+            .resize(600, 600)
+            .toFormat(profileImageExtension)
+            [profileImageExtension]({ quality: 90 }) // Dynamic function call
+            .toFile(`uploads/userImages/${profileImageFilename}`);
+        req.body.profileImage = profileImageFilename;
 
+        // Process carImage
+        const carImageExtension = getFileExtension(req.files.carImage[0].mimetype);
+        const carImageFilename = `carImage-${uuidv4()}-${Date.now()}.${carImageExtension}`;
+        await sharp(req.files.carImage[0].buffer)
+            .resize(600, 600)
+            .toFormat(carImageExtension)
+            [carImageExtension]({ quality: 90 }) // Dynamic function call
+            .toFile(`uploads/userImages/${carImageFilename}`);
+        req.body.carImage = carImageFilename;
+    }
+    next();
 });
 
 
-  
+const upload = multer({
+    storage: multerStorage,
+    fileFilter: multerFilter
+});
 
+exports.uploadAuthImage = upload.fields([
+    { name: 'profileImage', maxCount: 1 },
+    { name: 'carImage', maxCount: 1 }
+]);
 
+// Register
+exports.signUp = asyncHandler(async (req, res, next) => {
+    // const hashedPassword = await bcrypt.hash(req.body.password, 10);
 
+    const user = await userSchema.create({
+        username: req.body.username,
+        email: req.body.email,
+        password:req.body.password,
+        phone: req.body.phone,
+        profileImage: req.body.profileImage, // Correctly set the profileImage
+        carName: req.body.carName,
+        carNumber: req.body.carNumber,
+        carImage: req.body.carImage, // Correctly set the carImage
+    });
 
+    const token = jwt.sign(
+        { userId: user.id },
+        process.env.JWT_SECRET_KEY,
+        { expiresIn: process.env.JWT_EXPIRE_TIME }
+    );
+
+    const formattedUser = {
+        userId: user._id,
+        username: user.username,
+        email: user.email,
+        password: user.password,
+        phone: user.phone,
+        profileImage: user.profileImage,
+        carName: user.carName,
+        carNumber: user.carNumber,
+        carImage: user.carImage,
+        saved: user.saved,
+        role: user.role,
+        createdAt: formatDate(user.createdAt),
+        updatedAt: formatDate(user.updatedAt)
+    };
+
+    res.status(201).json({ userData: formattedUser, token });
+});
+
+    
 
 
 
 
         //      Login    //
 
-exports.login = asyncHandler(async (req,res,next) => {
-    const user = await userSchema.findOne({email : req.body.email}).populate({
-        path: 'saved', // Populate the saved field
-        model: 'Garages', // Ensure it populates from the Garage model
-        select: '-__v' // Exclude __v if you don't want it in the response
-    });
 
-    
+    exports.login = asyncHandler(async (req, res, next) => {
+            const foundUser = await userSchema.findOne({ email: req.body.email }).populate({
+                path: 'saved',
+                model: 'Garages',
+                select: '-__v'
+            });
+        
+            if (!foundUser) {
+                throw new ApiError("Incorrect email or password.", 404);
+            }
 
-    if(!user){
-         throw new ApiError("Incorrect email or password.",404)
-    }
-    else {
+            const checkPassword = await bcrypt.compare(req.body.password, foundUser.password);
+            if (!checkPassword) {
+                throw new ApiError("Incorrect email or password.", 404);
+            }
+        
+            const token = jwt.sign(
+                { userId: foundUser.id },
+                process.env.JWT_SECRET_KEY,
+                { expiresIn: process.env.JWT_EXPIRE_TIME }
+            );
+            const formattedUser = {
+                role: foundUser.role,
+                userId: foundUser._id,
+                username: foundUser.username,
+                email: foundUser.email,
+                carName: foundUser.carName,
+                carNumber: foundUser.carNumber,
+                saved: foundUser.saved.map(item => ({
+                    ...item.toObject(), 
+                    openDate:formatDate(item.openDate),
+                    endDate: formatDate(item.endDate),// Convert to a plain object if needed (e.g., Mongoose document)
+                    createdAt: formatDate(item.createdAt),
+                    updatedAt: formatDate(item.updatedAt)
+                })),
+                createdAt: formatDate(foundUser.createdAt),
+                updatedAt: formatDate(foundUser.updatedAt)
+            };
+        
+            res.status(200).json({ userData: formattedUser, token });
+        });
 
-        const checkPassword = await bcrypt.compare(req.body.password , user.password)
-        if(!checkPassword){
-            throw new ApiError("Incorrect email or password.",404)
-        }
-        else {
-            const token = jwt.sign({userId : user.id} , 
-                process.env.JWT_SECRET_KEY , 
-                {expiresIn: process.env.JWT_EXPIRE_TIME})
-
-                const formattedUser = {
-                    role: user.role,
-                    userId: user._id, 
-                    username: user.username,
-                    email: user.email,
-                    carname: user.carName,
-                    carnumber: user.carNumber,
-                    saved: user.saved,
-                    createdAt: formatDate(user.createdAt),
-                    updatedAt: formatDate(user.updatedAt) 
-                };
-    
-                delete user._doc.password && delete user._doc.__v
-                res.status(200).json({userData :formattedUser , token})
-        }
-
-    }
-
-})       
-
-
+ 
 
           //     Fogot Pssword   ///
 

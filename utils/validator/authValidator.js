@@ -32,10 +32,7 @@ exports.signupValidator = [
     .withMessage("Phone is required , Please enter your phone Number") 
     .isMobilePhone(['ar-EG','ar-SA'])
     .withMessage("Invalid phone number only accept EG and SA phone number")   
-    ,  
-     
- 
-
+    , 
   check("carName")
     .notEmpty()
     .withMessage("Car name is required, Please enter your car name"),
